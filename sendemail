@@ -8,8 +8,8 @@ function sendAutomaticEmail() {
         return;
     }
 	
-    var recipient = 'shailp@amobee.com';
-    var ccEmails = 'shailp@cybage.com';
+    var recipient = 'emailaddress1';  //Update 'emailaddress1' with required addresses
+    var ccEmails = 'emailaddress2','emailaddress3';   //Update 'emailaddress2', 'emailaddress3' with required addresses
     var subject = "Platform - Daily Scrum Notes ("+ todayDate + ")";
     var id = 'abc'; //Update 'abc' with id of your document's id
       
