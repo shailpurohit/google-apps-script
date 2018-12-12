@@ -1,0 +1,150 @@
+function sendAutomaticEmail() {
+
+    var holidays = ['15-Aug-2018','02-Oct-2018','19-Oct-2018','07-Nov-2018','08-Nov-2018','09-Nov-2018'];
+    var todayDate = Utilities.formatDate(new Date, 'GMT+5.5', "dd-MMM-yyyy");
+
+    //Don't send email on holidays
+    if (isHoliday(holidays, todayDate)) {
+        return;
+    }
+	
+    var recipient = 'shailp@amobee.com';
+    var ccEmails = 'shailp@cybage.com';
+    var subject = "Platform - Daily Scrum Notes ("+ todayDate + ")";
+    var id = 'abc'; //Update 'abc' with id of your document's id
+      
+    var removedTableData = removeTablesIfEmpty(id);
+    
+    var html = getDataAsHTMLDoc(id);
+    
+    html = inlineCSS(html);
+
+    MailApp.sendEmail({
+       to: recipient,
+       cc: ccEmails,
+       subject: subject,
+       htmlBody:  html 
+    });
+
+    // Add deleted table (Dependencies and Pull request queue back to document)
+    addRemovedTablesBackToDoc(id, removedTableData);
+}
+
+function isHoliday (holidays, todayDate) {
+    var isHoliday = false;
+    for (var i = 0; i < holidays.length; i++) {
+        if (holidays[i] == todayDate) {
+            isHoliday = true;
+            break;
+        }
+    }
+    return isHoliday;
+}
+
+function removeTablesIfEmpty (documentId) {
+    var document = documentId ? DocumentApp.openById(documentId) : DocumentApp.getActiveDocument();
+    var body = document.getBody();
+    var search = null;
+    var tables = [];
+    var removedTable = [];
+    var index = [];
+
+    // Extract all the tables inside the Google Document
+    while (search = body.findElement(DocumentApp.ElementType.TABLE, search)) {
+        tables.push(search.getElement().asTable());
+    }
+    var noOfTables = tables;
+    var i = 0;
+  
+    Logger.clear();
+    // Remove table (Dependencies and PR) in case of not having raws
+    tables.forEach(function (table) {
+        //Logger.log(table.getLinkUrl());
+        var rows = table.getNumRows();
+        // Iterate through each row of the table
+        for (var r = rows - 1; r >= 0; r--) {
+            Logger.log(""+table.getRow(r).getText());
+            // If the table row contains no text, delete it
+            if ((table.getRow(r).getText().trim().equals("Dependencies") || table.getRow(r).getText().trim().equals("Pull Request Queue")) && table.getNumRows() == 2) {
+                //Logger.clear();
+                //Logger.log("Index "+index);
+                //Logger.log("Removed "+r);
+                index[i] = table.getParent().getChildIndex(table);
+                removedTable[i] = table.removeFromParent();
+                i++;
+            }
+        }
+    });
+   
+    document.saveAndClose(); // This is mandatory step otherwise changes will not be affected.
+  
+    var removedTableData = {
+        'removedTable': removedTable,
+        'index': index
+    }; 
+  
+    return removedTableData;
+}
+
+function getDataAsHTMLDoc (documentId) {
+    var forDriveScope = DriveApp.getStorageUsed(); //needed to get Drive Scope requested
+    var url = "https://docs.google.com/feeds/download/documents/export/Export?id="+documentId+"&exportFormat=html";
+    var param = {
+        method             : "get",
+        headers            : {"Authorization": "Bearer " + ScriptApp.getOAuthToken()},
+        contentType        : "html/rich",
+        muteHttpExceptions : true
+    };
+  
+    return UrlFetchApp.fetch(url, param).getContentText();
+}
+
+function addRemovedTablesBackToDoc(documentId, removedTableData) {
+    var removedTable = removedTableData.removedTable;
+    var index = removedTableData.index;
+    for (var i = 0; i< removedTable.length; i++) {
+        if (removedTable[i].getType() == DocumentApp.ElementType.TABLE) {
+            //Logger.log("Appending");
+            //Logger.log("Index "+index);
+            //Logger.log("id "+id);
+            //Logger.log("REmoved Table "+removedTable[i])
+            document = DocumentApp.openById(documentId)
+            body = document.getBody();
+            body.insertTable(index[i], removedTable[i]);
+        }
+    }
+}
+
+/**
+ * In line CSS within an HTML file using the MailChimp API. To use the API you must
+ * register for an account and then copy your API key into the script property
+ * "mailchimp.apikey". See here for information on how to find your API key:
+ * http://kb.mailchimp.com/article/where-can-i-find-my-api-key/.
+ */
+
+function inlineCSS(html) {
+    //Replace 'xyz' with your API key
+    var apikey = 'xyz';
+    if (!apikey) {
+        apikey = PropertiesService.getScriptProperties().getProperty('xyz');
+        CacheService.getPublicCache().put('xyz', apikey);
+    }
+    var datacenter = apikey.split('-')[1];
+    var url = 'https://us19.api.mailchimp.com/2.0/helper/inline-css';
+    //Utilities.formatString('https://%s.api.mailchimp.com/2.0/helper/inline-css', datacenter);
+    var response = UrlFetchApp.fetch(url, {
+        method: 'post',
+        payload: {
+            apikey: apikey,
+            html: html,
+            strip_css: true
+        },
+        'muteHttpExceptions' : true
+    });
+    var output = JSON.parse(response.getContentText());
+    if (!response.getResponseCode() == 200) {
+        throw 'Error in line CSS: ' + output['error'];
+    }
+
+    return output['html'];
+}
